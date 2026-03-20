@@ -10,7 +10,7 @@ import json
 import base64
 import time
 from datetime import datetime
-from moviepy.editor import VideoClip, AudioFileClip
+from moviepy import VideoClip, AudioFileClip
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 from google.oauth2.credentials import Credentials
