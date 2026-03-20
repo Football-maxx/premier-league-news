@@ -164,7 +164,7 @@ def create_video(audio_file, mouth_cues, home, away, h_score, a_score, output_fi
 
     video = VideoClip(make_frame, duration=duration)
     video = video.with_audio(audio_clip)
-    video.write_videofile(output_file, fps=fps, codec="libx264", audio_codec="aac", verbose=False, logger=None)
+    video.write_videofile(output_file, fps=fps, codec="libx264", audio_codec="aac")
     print(f"Video saved to {output_file}")
 
 def upload_to_youtube(video_file, title):
