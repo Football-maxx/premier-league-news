@@ -118,20 +118,8 @@ def generate_audio(text, filename):
         os.system(f'ffmpeg -f lavfi -i anullsrc=r=44100:cl=mono -t 2 -q:a 9 -acodec libmp3lame {filename}')
 
 def get_mouth_cues(audio_file):
-    """Call Replicate's Rhubarb model"""
-    try:
-        with open(audio_file, "rb") as f:
-            audio_data = base64.b64encode(f.read()).decode()
-        client = replicate.Client(api_token=REPLICATE_API_TOKEN)
-        output = client.run(
-            "emiliacb/replicate-rhubarb:latest",
-            input={"audio_data": audio_data}
-        )
-        data = json.loads(output)
-        return data.get("mouthCues", [])
-    except Exception as e:
-        print(f"Rhubarb failed: {e}. Using default mouth.")
-        return [{"start": 0.0, "end": 999.0, "value": "X"}]
+    print("Using default mouth shapes (Replicate call skipped).")
+    return [{"start": 0.0, "end": 999.0, "value": "X"}]
 
 def create_video(audio_file, mouth_cues, home, away, h_score, a_score, output_file):
     background = Image.open("assets/background.png").convert("RGBA")
@@ -152,7 +140,7 @@ def create_video(audio_file, mouth_cues, home, away, h_score, a_score, output_fi
     def make_frame(t):
         frame = background.copy()
         bounce = 5 * np.sin(2 * np.pi * 1.5 * t)
-        char_pos = (char_base_pos[0], char_base_pos[1] + bounce)
+        char_pos = (int(char_base_pos[0]), int(char_base_pos[1] + bounce))
         frame.paste(base_char, char_pos, base_char)
 
         shape = "X"
@@ -161,7 +149,7 @@ def create_video(audio_file, mouth_cues, home, away, h_score, a_score, output_fi
                 shape = cue["value"]
                 break
         mouth_img = mouths.get(shape, mouths["X"])
-        mouth_pos = (char_pos[0] + mouth_offset[0], char_pos[1] + mouth_offset[1])
+        mouth_pos = (int(char_pos[0] + mouth_offset[0]), int(char_pos[1] + mouth_offset[1]))
         frame.paste(mouth_img, mouth_pos, mouth_img)
 
         draw = ImageDraw.Draw(frame)
