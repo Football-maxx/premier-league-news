@@ -196,6 +196,6 @@ def upload_to_youtube(video_file, title):
 def main():
     fetch_matches()
     # Test with dummy match – forces a video to be created
-    process_match(999999, "Arsenal", "Everton", 2, 1)
+    # process_match(999999, "Arsenal", "Everton", 2, 1)
 if __name__ == "__main__":
     main()
