@@ -163,7 +163,7 @@ def create_video(audio_file, mouth_cues, home, away, h_score, a_score, output_fi
         return np.array(frame)
 
     video = VideoClip(make_frame, duration=duration)
-    video = video.set_audio(audio_clip)
+    video = video.with_audio(audio_clip)
     video.write_videofile(output_file, fps=fps, codec="libx264", audio_codec="aac", verbose=False, logger=None)
     print(f"Video saved to {output_file}")
 
