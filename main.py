@@ -11,7 +11,7 @@ import json
 import base64
 import time
 from datetime import datetime
-from moviepy import VideoClip, AudioFileClip, VideoFileClip, CompositeVideoClip, TextClip, concatenate_videoclips
+from moviepy import VideoClip, AudioFileClip, VideoFileClip, CompositeVideoClip, concatenate_videoclips
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 from google.oauth2.credentials import Credentials
@@ -143,14 +143,6 @@ def process_match(fixture_id, home, away, h_score, a_score):
     goals = get_match_goals(fixture_id)
     debug_print(f"DEBUG: goals after get_match_goals: {goals}")
 
-    # --- TEMPORARY: inject dummy goal for testing ---
-    if fixture_id == 999999 and not goals:
-        goals = [{'player': 'Test Scorer', 'minute': 67, 'team': home}]
-        debug_print("Dummy goal added for testing.")
-    else:
-        debug_print("DEBUG: Dummy goal injection not triggered.")
-    # --- end temporary code ---
-
     debug_print(f"DEBUG: Number of goals = {len(goals)}")
     for i, g in enumerate(goals):
         debug_print(f"DEBUG: Goal {i+1}: {g}")
@@ -167,7 +159,7 @@ def generate_script(home, away, h_score, a_score):
     return f"Hello football fans! Here's the latest Premier League result. {home} {h_score} – {a_score} {away}. That's all for now. Don't forget to like and subscribe!"
 
 def combine_anchor_with_goals(anchor_path, goals, output_path):
-    """Concatenate anchor video with goal clips, adding text overlays."""
+    """Concatenate anchor video with goal clips, adding text overlays using PIL."""
     debug_print("DEBUG: combine_anchor_with_goals started")
     if not os.path.exists(anchor_path):
         debug_print(f"ERROR: Anchor video not found: {anchor_path}")
@@ -204,16 +196,38 @@ def combine_anchor_with_goals(anchor_path, goals, output_path):
                 if not os.path.exists(clip_path):
                     debug_print(f"Skipping missing clip: {clip_path}")
                     continue
+
+                # Load the clip
                 clip = VideoFileClip(clip_path)
                 debug_print(f"Loaded clip: {clip_path}, duration={clip.duration}")
-                # Add text overlay with scorer name and minute
-                txt = TextClip(f"{goal['player']} – {goal['minute']}'",
-                               fontsize=40, color='yellow', stroke_color='black', stroke_width=2,
-                               font='Arial')
-                txt = txt.set_position(('center', 'bottom')).set_duration(clip.duration)
-                combined = CompositeVideoClip([clip, txt])
+
+                # Create text overlay using PIL (frame-by-frame)
+                text_str = f"{goal['player']} – {goal['minute']}'"
+                # Choose a font (fallback to default if not found)
+                try:
+                    font = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf", 40)
+                except:
+                    font = ImageFont.load_default()
+
+                def make_text_frame(t):
+                    # Create a transparent frame
+                    img = Image.new('RGBA', (clip.w, clip.h), (0,0,0,0))
+                    draw = ImageDraw.Draw(img)
+                    # Get text size and position
+                    bbox = draw.textbbox((0,0), text_str, font=font)
+                    tw = bbox[2] - bbox[0]
+                    th = bbox[3] - bbox[1]
+                    x = (clip.w - tw) // 2
+                    y = clip.h - th - 20  # bottom with margin
+                    draw.text((x, y), text_str, fill='yellow', font=font, stroke_width=2, stroke_fill='black')
+                    return np.array(img)
+
+                text_clip = VideoClip(make_text_frame, duration=clip.duration)
+                # Composite text over the clip
+                combined = CompositeVideoClip([clip, text_clip])
                 clips.append(combined)
                 debug_print(f"Added clip with text: {clip_path}")
+
             except Exception as e:
                 debug_print(f"Could not add clip {clip_path}: {e}")
 
@@ -319,8 +333,7 @@ def main():
     try:
         debug_print("DEBUG: main() started")
         fetch_matches()
-        debug_print("DEBUG: calling dummy match")
-        process_match(999999, "Arsenal", "Everton", 2, 1)
+        # Dummy match removed – only real matches are processed
     except Exception as e:
         debug_print(f"FATAL ERROR: {e}")
         raise
