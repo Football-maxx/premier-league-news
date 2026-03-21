@@ -55,6 +55,12 @@ jobs:
           PYTHONUNBUFFERED: 1
         run: python main.py
 
+      - name: Upload debug log
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-log
+          path: debug.log
+
       - name: Upload final video artifact
         uses: actions/upload-artifact@v4
         with:
