@@ -124,6 +124,11 @@ def process_match(fixture_id, home, away, h_score, a_score):
 
     # 2. Get goals for this match
     goals = get_match_goals(fixture_id)
+    # --- TEMPORARY: inject dummy goal for testing ---
+    if fixture_id == 999999 and not goals:
+        goals = [{'player': 'Test Scorer', 'minute': 67, 'team': home}]
+        print("Dummy goal added for testing.")
+    # --- end temporary code ---
 
     # 3. Combine anchor video with goal clips
     final_video = f"final_{fixture_id}.mp4"
