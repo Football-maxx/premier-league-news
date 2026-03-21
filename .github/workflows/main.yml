@@ -38,3 +38,8 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
         run: python main.py
+      - name: Upload final video artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-video
+          path: final_*.mp4
