@@ -12,6 +12,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Print process_match function
+        run: |
+          echo "=== process_match function ==="
+          sed -n '/^def process_match/,/^def /p' main.py
+
       - name: Verify main.py content
         run: |
           echo "First 20 lines of main.py:"
