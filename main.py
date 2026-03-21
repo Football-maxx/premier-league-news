@@ -209,7 +209,7 @@ def combine_anchor_with_goals(anchor_path, goals, output_path):
                 # Add text overlay with scorer name and minute
                 txt = TextClip(f"{goal['player']} – {goal['minute']}'",
                                fontsize=40, color='yellow', stroke_color='black', stroke_width=2,
-                               font='Arial', method='caption')
+                               font='Arial')
                 txt = txt.set_position(('center', 'bottom')).set_duration(clip.duration)
                 combined = CompositeVideoClip([clip, txt])
                 clips.append(combined)
