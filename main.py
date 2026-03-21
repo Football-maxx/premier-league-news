@@ -19,6 +19,8 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 import replicate
 from supabase import create_client, Client
+from moviepy import VideoFileClip, CompositeVideoClip, TextClip, concatenate_videoclips
+import random   # if you want random selection (optional)
 
 # ---------- CONFIGURATION (DO NOT EDIT HERE – WILL USE ENVIRONMENT VARIABLES) ----------
 FOOTBALL_API_KEY = os.environ.get("FOOTBALL_API_KEY")
@@ -47,6 +49,28 @@ def fetch_matches():
     except Exception as e:
         print(f"Error fetching matches: {e}")
         return
+def get_match_goals(fixture_id):
+    """Get goals from Football-Data.org for a specific match."""
+    url = f"https://api.football-data.org/v4/matches/{fixture_id}"
+    headers = {"X-Auth-Token": FOOTBALL_API_KEY}
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+    except Exception as e:
+        print(f"Could not fetch match details: {e}")
+        return []
+
+    goals = []
+    for goal in data.get('goals', []):
+        scorer = goal.get('scorer', {}).get('name')
+        if scorer:
+            goals.append({
+                'player': scorer,
+                'minute': goal.get('minute'),
+                'team': goal.get('team', {}).get('name')
+            })
+    return goals
 
     # Get already posted matches from Supabase
     posted_response = supabase.table("matches").select("fixture_id").eq("posted", 1).execute()
@@ -89,20 +113,62 @@ def fetch_matches():
             supabase.table("matches").update({"posted": 1}).eq("fixture_id", fixture_id).execute()
 
 def process_match(fixture_id, home, away, h_score, a_score):
-    """Generate video for a single match"""
+    """Generate video for a single match, including goal clips."""
+    # 1. Generate anchor video (news report)
     script = generate_script(home, away, h_score, a_score)
     audio_file = f"audio_{fixture_id}.mp3"
     generate_audio(script, audio_file)
     mouth_cues = get_mouth_cues(audio_file)
-    video_file = f"video_{fixture_id}.mp4"
-    create_video(audio_file, mouth_cues, home, away, h_score, a_score, video_file)
-    upload_to_youtube(video_file, f"Premier League Result: {home} {h_score} – {a_score} {away}")
-    # Clean up (optional)
-    # os.remove(audio_file)
-    # os.remove(video_file)
+    anchor_video = f"anchor_{fixture_id}.mp4"
+    create_video(audio_file, mouth_cues, home, away, h_score, a_score, anchor_video)
 
+    # 2. Get goals for this match
+    goals = get_match_goals(fixture_id)
+
+    # 3. Combine anchor video with goal clips
+    final_video = f"final_{fixture_id}.mp4"
+    combine_anchor_with_goals(anchor_video, goals, final_video)
+
+    # 4. Upload
+    title = f"Premier League Result: {home} {h_score} – {a_score} {away}"
+    upload_to_youtube(final_video, title)
+
+    # Clean up temp files (optional)
+    # os.remove(anchor_video)
+    # os.remove(audio_file)
+    # os.remove(final_video)
 def generate_script(home, away, h_score, a_score):
     return f"Hello football fans! Here's the latest Premier League result. {home} {h_score} – {a_score} {away}. That's all for now. Don't forget to like and subscribe!"
+
+def combine_anchor_with_goals(anchor_path, goals, output_path):
+    """Concatenate anchor video with goal clips, adding text overlays."""
+    anchor = VideoFileClip(anchor_path)
+    clips = [anchor]
+
+    # List of your cartoon clips (use exact filenames as in assets/clips/)
+    goal_sequence = [
+        "assets/clips/goal_to_net.mp4",
+        "assets/clips/football_with_players.mp4",
+        "assets/clips/celebration.mp4",
+        "assets/clips/football_news.mp4"
+    ]
+
+    for goal in goals:
+        for clip_path in goal_sequence:
+            try:
+                clip = VideoFileClip(clip_path)
+                # Add text overlay with scorer name and minute
+                txt = TextClip(f"{goal['player']} – {goal['minute']}'",
+                               fontsize=40, color='yellow', stroke_color='black', stroke_width=2,
+                               font='Arial', method='caption')
+                txt = txt.set_position(('center', 'bottom')).set_duration(clip.duration)
+                combined = CompositeVideoClip([clip, txt])
+                clips.append(combined)
+            except Exception as e:
+                print(f"Could not add clip {clip_path}: {e}")
+
+    final = concatenate_videoclips(clips, method="compose")
+    final.write_videofile(output_path, codec='libx264', audio_codec='aac')
 
 def generate_audio(text, filename):
     url = f"http://api.voicerss.org/?key={VOICERSS_API_KEY}&hl=en-gb&src={text}&f=44khz_16bit_stereo"
