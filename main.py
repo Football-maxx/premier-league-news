@@ -10,7 +10,7 @@ import json
 import base64
 import time
 from datetime import datetime
-from moviepy import VideoClip, AudioFileClip
+from moviepy import VideoClip, AudioFileClip, VideoFileClip, CompositeVideoClip, TextClip, concatenate_videoclips
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 from google.oauth2.credentials import Credentials
@@ -19,17 +19,16 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 import replicate
 from supabase import create_client, Client
-from moviepy import VideoFileClip, CompositeVideoClip, TextClip, concatenate_videoclips
-import random   # if you want random selection (optional)
+import random
 
-# ---------- CONFIGURATION (DO NOT EDIT HERE – WILL USE ENVIRONMENT VARIABLES) ----------
+# ---------- CONFIGURATION (ENVIRONMENT VARIABLES) ----------
 FOOTBALL_API_KEY = os.environ.get("FOOTBALL_API_KEY")
 VOICERSS_API_KEY = os.environ.get("VOICERSS_API_KEY")
 REPLICATE_API_TOKEN = os.environ.get("REPLICATE_API_TOKEN")
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY")
 YOUTUBE_TOKEN_JSON = os.environ.get("YOUTUBE_TOKEN_JSON")
-# --------------------------------------------------------------------------------------
+# ------------------------------------------------------------
 
 # Initialize Supabase
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
@@ -49,28 +48,6 @@ def fetch_matches():
     except Exception as e:
         print(f"Error fetching matches: {e}")
         return
-def get_match_goals(fixture_id):
-    """Get goals from Football-Data.org for a specific match."""
-    url = f"https://api.football-data.org/v4/matches/{fixture_id}"
-    headers = {"X-Auth-Token": FOOTBALL_API_KEY}
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-    except Exception as e:
-        print(f"Could not fetch match details: {e}")
-        return []
-
-    goals = []
-    for goal in data.get('goals', []):
-        scorer = goal.get('scorer', {}).get('name')
-        if scorer:
-            goals.append({
-                'player': scorer,
-                'minute': goal.get('minute'),
-                'team': goal.get('team', {}).get('name')
-            })
-    return goals
 
     # Get already posted matches from Supabase
     posted_response = supabase.table("matches").select("fixture_id").eq("posted", 1).execute()
@@ -93,7 +70,7 @@ def get_match_goals(fixture_id):
             continue
 
         # Insert or update match in Supabase
-        data = {
+        data_row = {
             "fixture_id": fixture_id,
             "home_team": home,
             "away_team": away,
@@ -103,7 +80,7 @@ def get_match_goals(fixture_id):
             "away_score": away_score,
             "posted": 0
         }
-        supabase.table("matches").upsert(data, on_conflict="fixture_id").execute()
+        supabase.table("matches").upsert(data_row, on_conflict="fixture_id").execute()
 
         # If match finished, process it
         if status == 'FINISHED':
@@ -111,6 +88,29 @@ def get_match_goals(fixture_id):
             process_match(fixture_id, home, away, home_score, away_score)
             # Mark as posted
             supabase.table("matches").update({"posted": 1}).eq("fixture_id", fixture_id).execute()
+
+def get_match_goals(fixture_id):
+    """Get goals from Football-Data.org for a specific match."""
+    url = f"https://api.football-data.org/v4/matches/{fixture_id}"
+    headers = {"X-Auth-Token": FOOTBALL_API_KEY}
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+    except Exception as e:
+        print(f"Could not fetch match details: {e}")
+        return []
+
+    goals = []
+    for goal in data.get('goals', []):
+        scorer = goal.get('scorer', {}).get('name')
+        if scorer:
+            goals.append({
+                'player': scorer,
+                'minute': goal.get('minute'),
+                'team': goal.get('team', {}).get('name')
+            })
+    return goals
 
 def process_match(fixture_id, home, away, h_score, a_score):
     """Generate video for a single match, including goal clips."""
@@ -137,6 +137,7 @@ def process_match(fixture_id, home, away, h_score, a_score):
     # os.remove(anchor_video)
     # os.remove(audio_file)
     # os.remove(final_video)
+
 def generate_script(home, away, h_score, a_score):
     return f"Hello football fans! Here's the latest Premier League result. {home} {h_score} – {a_score} {away}. That's all for now. Don't forget to like and subscribe!"
 
@@ -145,7 +146,7 @@ def combine_anchor_with_goals(anchor_path, goals, output_path):
     anchor = VideoFileClip(anchor_path)
     clips = [anchor]
 
-    # List of your cartoon clips (use exact filenames as in assets/clips/)
+    # List of your cartoon clips – ensure these files exist in assets/clips/
     goal_sequence = [
         "assets/clips/goal_to_net.mp4",
         "assets/clips/football_with_players.mp4",
@@ -169,6 +170,7 @@ def combine_anchor_with_goals(anchor_path, goals, output_path):
 
     final = concatenate_videoclips(clips, method="compose")
     final.write_videofile(output_path, codec='libx264', audio_codec='aac')
+    print(f"Final video saved to {output_path}")
 
 def generate_audio(text, filename):
     url = f"http://api.voicerss.org/?key={VOICERSS_API_KEY}&hl=en-gb&src={text}&f=44khz_16bit_stereo"
@@ -231,7 +233,7 @@ def create_video(audio_file, mouth_cues, home, away, h_score, a_score, output_fi
     video = VideoClip(make_frame, duration=duration)
     video = video.with_audio(audio_clip)
     video.write_videofile(output_file, fps=fps, codec="libx264", audio_codec="aac")
-    print(f"Video saved to {output_file}")
+    print(f"Anchor video saved to {output_file}")
 
 def upload_to_youtube(video_file, title):
     if not YOUTUBE_TOKEN_JSON:
@@ -263,5 +265,6 @@ def main():
     fetch_matches()
     # Test with dummy match – forces a video to be created
     process_match(999999, "Arsenal", "Everton", 2, 1)
+
 if __name__ == "__main__":
     main()
