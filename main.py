@@ -128,9 +128,12 @@ def process_match(fixture_id, home, away, h_score, a_score):
     if fixture_id == 999999 and not goals:
         goals = [{'player': 'Test Scorer', 'minute': 67, 'team': home}]
         print("Dummy goal added for testing.")
-	for g in goals:
-        	print(f"DEBUG: Goal: {g}")
     # --- end temporary code ---
+
+    # DEBUG: print goals to log
+    print(f"DEBUG: Number of goals = {len(goals)}")
+    for g in goals:
+        print(f"DEBUG: Goal: {g}")
 
     # 3. Combine anchor video with goal clips
     final_video = f"final_{fixture_id}.mp4"
