@@ -91,6 +91,7 @@ def fetch_matches():
 
 def get_match_goals(fixture_id):
     """Get goals from Football-Data.org for a specific match."""
+    print(f"DEBUG: get_match_goals called for fixture {fixture_id}")
     url = f"https://api.football-data.org/v4/matches/{fixture_id}"
     headers = {"X-Auth-Token": FOOTBALL_API_KEY}
     try:
@@ -110,10 +111,12 @@ def get_match_goals(fixture_id):
                 'minute': goal.get('minute'),
                 'team': goal.get('team', {}).get('name')
             })
+    print(f"DEBUG: get_match_goals returning {len(goals)} goals")
     return goals
 
 def process_match(fixture_id, home, away, h_score, a_score):
     """Generate video for a single match, including goal clips."""
+    print(f"DEBUG: process_match called with fixture_id={fixture_id}")
     # 1. Generate anchor video (news report)
     script = generate_script(home, away, h_score, a_score)
     audio_file = f"audio_{fixture_id}.mp3"
@@ -124,16 +127,19 @@ def process_match(fixture_id, home, away, h_score, a_score):
 
     # 2. Get goals for this match
     goals = get_match_goals(fixture_id)
+    print(f"DEBUG: goals after get_match_goals: {goals}")
+
     # --- TEMPORARY: inject dummy goal for testing ---
     if fixture_id == 999999 and not goals:
         goals = [{'player': 'Test Scorer', 'minute': 67, 'team': home}]
         print("Dummy goal added for testing.")
+    else:
+        print("DEBUG: Dummy goal injection not triggered.")
     # --- end temporary code ---
 
-    # DEBUG: print goals to log
     print(f"DEBUG: Number of goals = {len(goals)}")
-    for g in goals:
-        print(f"DEBUG: Goal: {g}")
+    for i, g in enumerate(goals):
+        print(f"DEBUG: Goal {i+1}: {g}")
 
     # 3. Combine anchor video with goal clips
     final_video = f"final_{fixture_id}.mp4"
@@ -153,7 +159,18 @@ def generate_script(home, away, h_score, a_score):
 
 def combine_anchor_with_goals(anchor_path, goals, output_path):
     """Concatenate anchor video with goal clips, adding text overlays."""
-    anchor = VideoFileClip(anchor_path)
+    print("DEBUG: combine_anchor_with_goals started")
+    if not os.path.exists(anchor_path):
+        print(f"ERROR: Anchor video not found: {anchor_path}")
+        return
+
+    try:
+        anchor = VideoFileClip(anchor_path)
+        print(f"DEBUG: anchor clip loaded, duration={anchor.duration}")
+    except Exception as e:
+        print(f"ERROR: Could not load anchor video: {e}")
+        return
+
     clips = [anchor]
 
     # List of your cartoon clips – ensure these files exist in assets/clips/
@@ -164,10 +181,22 @@ def combine_anchor_with_goals(anchor_path, goals, output_path):
         "assets/clips/football_news.mp4"
     ]
 
+    # Check if clip files exist
+    for clip_path in goal_sequence:
+        if not os.path.exists(clip_path):
+            print(f"WARNING: Clip file not found: {clip_path}")
+        else:
+            print(f"Clip file exists: {clip_path}")
+
     for goal in goals:
+        print(f"DEBUG: Processing goal: {goal}")
         for clip_path in goal_sequence:
             try:
+                if not os.path.exists(clip_path):
+                    print(f"Skipping missing clip: {clip_path}")
+                    continue
                 clip = VideoFileClip(clip_path)
+                print(f"Loaded clip: {clip_path}, duration={clip.duration}")
                 # Add text overlay with scorer name and minute
                 txt = TextClip(f"{goal['player']} – {goal['minute']}'",
                                fontsize=40, color='yellow', stroke_color='black', stroke_width=2,
@@ -175,8 +204,14 @@ def combine_anchor_with_goals(anchor_path, goals, output_path):
                 txt = txt.set_position(('center', 'bottom')).set_duration(clip.duration)
                 combined = CompositeVideoClip([clip, txt])
                 clips.append(combined)
+                print(f"Added clip with text: {clip_path}")
             except Exception as e:
                 print(f"Could not add clip {clip_path}: {e}")
+
+    if len(clips) == 1:
+        print("WARNING: No clips were added (no goals or all clips failed).")
+    else:
+        print(f"Total clips to concatenate: {len(clips)}")
 
     final = concatenate_videoclips(clips, method="compose")
     final.write_videofile(output_path, codec='libx264', audio_codec='aac')
@@ -272,8 +307,9 @@ def upload_to_youtube(video_file, title):
         print(f"Upload failed: {e}")
 
 def main():
+    print("DEBUG: main() started")
     fetch_matches()
-    # Test with dummy match – forces a video to be created
+    print("DEBUG: calling dummy match")
     process_match(999999, "Arsenal", "Everton", 2, 1)
 
 if __name__ == "__main__":
