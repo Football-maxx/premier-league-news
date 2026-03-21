@@ -5,6 +5,7 @@ Runs on GitHub Actions (free)
 """
 
 import os
+import sys
 import requests
 import json
 import base64
@@ -47,6 +48,7 @@ def fetch_matches():
         data = response.json()
     except Exception as e:
         print(f"Error fetching matches: {e}")
+        sys.stdout.flush()
         return
 
     # Get already posted matches from Supabase
@@ -85,6 +87,7 @@ def fetch_matches():
         # If match finished, process it
         if status == 'FINISHED':
             print(f"Processing finished match: {home} vs {away}")
+            sys.stdout.flush()
             process_match(fixture_id, home, away, home_score, away_score)
             # Mark as posted
             supabase.table("matches").update({"posted": 1}).eq("fixture_id", fixture_id).execute()
@@ -92,6 +95,7 @@ def fetch_matches():
 def get_match_goals(fixture_id):
     """Get goals from Football-Data.org for a specific match."""
     print(f"DEBUG: get_match_goals called for fixture {fixture_id}")
+    sys.stdout.flush()
     url = f"https://api.football-data.org/v4/matches/{fixture_id}"
     headers = {"X-Auth-Token": FOOTBALL_API_KEY}
     try:
@@ -100,6 +104,7 @@ def get_match_goals(fixture_id):
         data = response.json()
     except Exception as e:
         print(f"Could not fetch match details: {e}")
+        sys.stdout.flush()
         return []
 
     goals = []
@@ -112,11 +117,13 @@ def get_match_goals(fixture_id):
                 'team': goal.get('team', {}).get('name')
             })
     print(f"DEBUG: get_match_goals returning {len(goals)} goals")
+    sys.stdout.flush()
     return goals
 
 def process_match(fixture_id, home, away, h_score, a_score):
     """Generate video for a single match, including goal clips."""
     print(f"DEBUG: process_match called with fixture_id={fixture_id}")
+    sys.stdout.flush()
     # 1. Generate anchor video (news report)
     script = generate_script(home, away, h_score, a_score)
     audio_file = f"audio_{fixture_id}.mp3"
@@ -128,25 +135,30 @@ def process_match(fixture_id, home, away, h_score, a_score):
     # 2. Get goals for this match
     goals = get_match_goals(fixture_id)
     print(f"DEBUG: goals after get_match_goals: {goals}")
+    sys.stdout.flush()
 
     # --- TEMPORARY: inject dummy goal for testing ---
     if fixture_id == 999999 and not goals:
         goals = [{'player': 'Test Scorer', 'minute': 67, 'team': home}]
         print("Dummy goal added for testing.")
+        sys.stdout.flush()
     else:
         print("DEBUG: Dummy goal injection not triggered.")
+        sys.stdout.flush()
     # --- end temporary code ---
 
     print(f"DEBUG: Number of goals = {len(goals)}")
+    sys.stdout.flush()
     for i, g in enumerate(goals):
         print(f"DEBUG: Goal {i+1}: {g}")
+        sys.stdout.flush()
 
     # 3. Combine anchor video with goal clips
     final_video = f"final_{fixture_id}.mp4"
     combine_anchor_with_goals(anchor_video, goals, final_video)
 
     # 4. Upload
-    title = f"Premier League Result: {home} {h_score} – {a_score} {away}"
+    title = f"Premier League Result: {home} {h_score} – {a_score} {away} - {datetime.now().strftime('%Y%m%d-%H%M')}"
     upload_to_youtube(final_video, title)
 
     # Clean up temp files (optional)
@@ -160,15 +172,19 @@ def generate_script(home, away, h_score, a_score):
 def combine_anchor_with_goals(anchor_path, goals, output_path):
     """Concatenate anchor video with goal clips, adding text overlays."""
     print("DEBUG: combine_anchor_with_goals started")
+    sys.stdout.flush()
     if not os.path.exists(anchor_path):
         print(f"ERROR: Anchor video not found: {anchor_path}")
+        sys.stdout.flush()
         return
 
     try:
         anchor = VideoFileClip(anchor_path)
         print(f"DEBUG: anchor clip loaded, duration={anchor.duration}")
+        sys.stdout.flush()
     except Exception as e:
         print(f"ERROR: Could not load anchor video: {e}")
+        sys.stdout.flush()
         return
 
     clips = [anchor]
@@ -187,16 +203,20 @@ def combine_anchor_with_goals(anchor_path, goals, output_path):
             print(f"WARNING: Clip file not found: {clip_path}")
         else:
             print(f"Clip file exists: {clip_path}")
+        sys.stdout.flush()
 
     for goal in goals:
         print(f"DEBUG: Processing goal: {goal}")
+        sys.stdout.flush()
         for clip_path in goal_sequence:
             try:
                 if not os.path.exists(clip_path):
                     print(f"Skipping missing clip: {clip_path}")
+                    sys.stdout.flush()
                     continue
                 clip = VideoFileClip(clip_path)
                 print(f"Loaded clip: {clip_path}, duration={clip.duration}")
+                sys.stdout.flush()
                 # Add text overlay with scorer name and minute
                 txt = TextClip(f"{goal['player']} – {goal['minute']}'",
                                fontsize=40, color='yellow', stroke_color='black', stroke_width=2,
@@ -205,17 +225,21 @@ def combine_anchor_with_goals(anchor_path, goals, output_path):
                 combined = CompositeVideoClip([clip, txt])
                 clips.append(combined)
                 print(f"Added clip with text: {clip_path}")
+                sys.stdout.flush()
             except Exception as e:
                 print(f"Could not add clip {clip_path}: {e}")
+                sys.stdout.flush()
 
     if len(clips) == 1:
         print("WARNING: No clips were added (no goals or all clips failed).")
     else:
         print(f"Total clips to concatenate: {len(clips)}")
+    sys.stdout.flush()
 
     final = concatenate_videoclips(clips, method="compose")
     final.write_videofile(output_path, codec='libx264', audio_codec='aac')
     print(f"Final video saved to {output_path}")
+    sys.stdout.flush()
 
 def generate_audio(text, filename):
     url = f"http://api.voicerss.org/?key={VOICERSS_API_KEY}&hl=en-gb&src={text}&f=44khz_16bit_stereo"
@@ -229,9 +253,11 @@ def generate_audio(text, filename):
         print(f"TTS failed: {e}")
         # Create a silent fallback audio
         os.system(f'ffmpeg -f lavfi -i anullsrc=r=44100:cl=mono -t 2 -q:a 9 -acodec libmp3lame {filename}')
+    sys.stdout.flush()
 
 def get_mouth_cues(audio_file):
     print("Using default mouth shapes (Replicate call skipped).")
+    sys.stdout.flush()
     return [{"start": 0.0, "end": 999.0, "value": "X"}]
 
 def create_video(audio_file, mouth_cues, home, away, h_score, a_score, output_file):
@@ -279,10 +305,12 @@ def create_video(audio_file, mouth_cues, home, away, h_score, a_score, output_fi
     video = video.with_audio(audio_clip)
     video.write_videofile(output_file, fps=fps, codec="libx264", audio_codec="aac")
     print(f"Anchor video saved to {output_file}")
+    sys.stdout.flush()
 
 def upload_to_youtube(video_file, title):
     if not YOUTUBE_TOKEN_JSON:
         print("YouTube token missing. Cannot upload.")
+        sys.stdout.flush()
         return
     creds_data = json.loads(YOUTUBE_TOKEN_JSON)
     creds = Credentials.from_authorized_user_info(creds_data)
@@ -305,12 +333,20 @@ def upload_to_youtube(video_file, title):
         print(f"Upload successful! Video ID: {response['id']}")
     except Exception as e:
         print(f"Upload failed: {e}")
+    sys.stdout.flush()
 
 def main():
-    print("DEBUG: main() started")
-    fetch_matches()
-    print("DEBUG: calling dummy match")
-    process_match(999999, "Arsenal", "Everton", 2, 1)
+    try:
+        print("DEBUG: main() started")
+        sys.stdout.flush()
+        fetch_matches()
+        print("DEBUG: calling dummy match")
+        sys.stdout.flush()
+        process_match(999999, "Arsenal", "Everton", 2, 1)
+    except Exception as e:
+        print(f"FATAL ERROR: {e}")
+        sys.stdout.flush()
+        raise
 
 if __name__ == "__main__":
     main()
