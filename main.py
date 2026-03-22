@@ -225,7 +225,8 @@ def build_video_from_clips(goals, audio_file, output_path):
 
     # Trim video to match audio duration (cut off any extra)
     if final_video.duration > audio_duration:
-        final_video = final_video.subclip(0, audio_duration)
+        # Use with_duration (works in moviepy 2.x) to trim
+        final_video = final_video.with_duration(audio_duration)
         debug_print(f"Trimmed video to {audio_duration} seconds")
     else:
         debug_print("Video is shorter than audio; audio will be truncated.")
