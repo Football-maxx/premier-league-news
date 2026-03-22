@@ -273,28 +273,7 @@ def upload_to_youtube(video_file, title):
 def main():
     try:
         debug_print("DEBUG: main() started")
-        fetch_matches()
-
-        # --- TEST MODE: create a dummy video without uploading ---
-        debug_print("DEBUG: TEST MODE – generating dummy match video (no upload)")
-        fixture_id = 999999
-        home = "Arsenal"
-        away = "Everton"
-        h_score = 2
-        a_score = 1
-        # Inject a dummy goal
-        goals = [{'player': 'Test Scorer', 'minute': 67, 'team': home}]
-        debug_print(f"DEBUG: Dummy goal injected: {goals}")
-        # Generate audio
-        script = generate_script(home, away, h_score, a_score)
-        audio_file = f"audio_{fixture_id}.mp3"
-        generate_audio(script, audio_file)
-        # Build video from clips (no anchor)
-        final_video = f"final_{fixture_id}.mp4"
-        build_video_from_clips(goals, audio_file, final_video)
-        debug_print("TEST MODE: dummy video created, skipping YouTube upload")
-        # --- end test mode ---
-
+        fetch_matches()                     # Only real matches
     except Exception as e:
         debug_print(f"FATAL ERROR: {e}")
         raise
