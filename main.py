@@ -155,11 +155,11 @@ def build_video_from_clips(goals, audio_file, output_path):
     """
     Create a video by concatenating the four cartoon clips in order,
     with the scorer's name/minute overlaid on the goal_to_net clip.
-    The video duration is trimmed to match the audio length.
+    The video plays its full duration; audio plays for its length (then silence).
     """
     debug_print("DEBUG: build_video_from_clips started")
 
-    # Load audio to get its duration
+    # Load audio to get its duration (we won't trim video, but keep for reference)
     audio_clip = AudioFileClip(audio_file)
     audio_duration = audio_clip.duration
     debug_print(f"DEBUG: audio duration = {audio_duration} seconds")
@@ -185,7 +185,7 @@ def build_video_from_clips(goals, audio_file, output_path):
 
             # For the goal_to_net clip, add text overlay if there are goals
             if clip_path == "assets/clips/goal_to_net.mp4" and goals:
-                # Use the first goal (for simplicity; you can iterate if multiple)
+                # Use the first goal (extend for multiple goals if needed)
                 goal = goals[0]
                 text_str = f"{goal['player']} – {goal['minute']}'"
 
@@ -221,17 +221,10 @@ def build_video_from_clips(goals, audio_file, output_path):
 
     # Concatenate all clips
     final_video = concatenate_videoclips(all_clips, method="compose")
-    debug_print(f"Total video duration before trimming = {final_video.duration} seconds")
+    debug_print(f"Total video duration = {final_video.duration} seconds")
+    debug_print("Video will play its full duration; audio will play for its length then go silent.")
 
-    # Trim video to match audio duration (cut off any extra)
-    if final_video.duration > audio_duration:
-        # Use with_duration (works in moviepy 2.x) to trim
-        final_video = final_video.with_duration(audio_duration)
-        debug_print(f"Trimmed video to {audio_duration} seconds")
-    else:
-        debug_print("Video is shorter than audio; audio will be truncated.")
-
-    # Set audio
+    # Set audio (no trimming – video will continue after audio ends)
     final_video = final_video.with_audio(audio_clip)
 
     # Write final video
