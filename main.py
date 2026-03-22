@@ -333,7 +333,30 @@ def main():
     try:
         debug_print("DEBUG: main() started")
         fetch_matches()
-        # Dummy match removed – only real matches are processed
+
+        # --- TEST MODE: create a dummy video without uploading ---
+        debug_print("DEBUG: TEST MODE – generating dummy match video (no upload)")
+        fixture_id = 999999
+        home = "Arsenal"
+        away = "Everton"
+        h_score = 2
+        a_score = 1
+        # Inject a dummy goal
+        goals = [{'player': 'Test Scorer', 'minute': 67, 'team': home}]
+        debug_print(f"DEBUG: Dummy goal injected: {goals}")
+        # Generate anchor video
+        script = generate_script(home, away, h_score, a_score)
+        audio_file = f"audio_{fixture_id}.mp3"
+        generate_audio(script, audio_file)
+        mouth_cues = get_mouth_cues(audio_file)
+        anchor_video = f"anchor_{fixture_id}.mp4"
+        create_video(audio_file, mouth_cues, home, away, h_score, a_score, anchor_video)
+        # Combine with clips
+        final_video = f"final_{fixture_id}.mp4"
+        combine_anchor_with_goals(anchor_video, goals, final_video)
+        debug_print("TEST MODE: dummy video created, skipping YouTube upload")
+        # --- end test mode ---
+
     except Exception as e:
         debug_print(f"FATAL ERROR: {e}")
         raise
