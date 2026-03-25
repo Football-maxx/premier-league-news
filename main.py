@@ -128,41 +128,36 @@ def get_match_goals(fixture_id):
     debug_print(f"DEBUG: get_match_goals returning {len(goals)} goals")
     return goals
 
-def process_match(fixture_id, home, away, h_score, a_score):
-    """Generate video using only cartoon clips (no anchor)."""
-    debug_print(f"DEBUG: process_match called with fixture_id={fixture_id}")
-    # 1. Generate script and audio
-    script = generate_script(home, away, h_score, a_score)
-    audio_file = f"audio_{fixture_id}.mp3"
-    generate_audio(script, audio_file)
-
-    # 2. Get goals for this match
-    goals = get_match_goals(fixture_id)
-    debug_print(f"DEBUG: goals after get_match_goals: {goals}")
-
-    # 3. Build video from clips (without anchor)
-    final_video = f"final_{fixture_id}.mp4"
-    build_video_from_clips(goals, audio_file, final_video)
-
-    # 4. Upload
-    title = f"Premier League Result: {home} {h_score} – {a_score} {away} - {datetime.now().strftime('%Y%m%d-%H%M')}"
-    upload_to_youtube(final_video, title)
-
-def generate_script(home, away, h_score, a_score):
-    return f"Hello football fans! Here's the latest Premier League result. {home} {h_score} – {a_score} {away}. That's all for now. Don't forget to like and subscribe!"
+def generate_script(home, away, h_score, a_score, goals):
+    """
+    Build a detailed script long enough to cover the video duration.
+    Uses the match result and goals to create a natural news narration.
+    """
+    # Intro
+    script = f"Hello football fans! Welcome to our Premier League match recap. "
+    # Match summary
+    script += f"In today's match, {home} faced {away}. "
+    # Goals
+    if goals:
+        script += f"There were {len(goals)} goals in this exciting encounter. "
+        for goal in goals:
+            script += f"In the {goal['minute']} minute, {goal['player']} scored for {goal['team']}. "
+    else:
+        script += f"It was a goalless draw. "
+    # Final score
+    script += f"The final score was {home} {h_score} – {away} {a_score}. "
+    # Outro
+    script += f"That's all for now. Don't forget to like and subscribe for more updates!"
+    debug_print(f"Generated script: {script}")
+    return script
 
 def build_video_from_clips(goals, audio_file, output_path):
     """
     Create a video by concatenating the four cartoon clips in order,
     with the scorer's name/minute overlaid on the goal_to_net clip.
-    The video plays its full duration; audio plays for its length (then silence).
+    The video plays its full duration; the audio is trimmed to match the video length.
     """
     debug_print("DEBUG: build_video_from_clips started")
-
-    # Load audio to get its duration (we won't trim video, but keep for reference)
-    audio_clip = AudioFileClip(audio_file)
-    audio_duration = audio_clip.duration
-    debug_print(f"DEBUG: audio duration = {audio_duration} seconds")
 
     # Define the sequence of clips (in the desired order)
     clip_sequence = [
@@ -174,7 +169,7 @@ def build_video_from_clips(goals, audio_file, output_path):
 
     all_clips = []
 
-    for idx, clip_path in enumerate(clip_sequence):
+    for clip_path in clip_sequence:
         if not os.path.exists(clip_path):
             debug_print(f"WARNING: Clip not found: {clip_path}")
             continue
@@ -221,10 +216,22 @@ def build_video_from_clips(goals, audio_file, output_path):
 
     # Concatenate all clips
     final_video = concatenate_videoclips(all_clips, method="compose")
-    debug_print(f"Total video duration = {final_video.duration} seconds")
-    debug_print("Video will play its full duration; audio will play for its length then go silent.")
+    video_duration = final_video.duration
+    debug_print(f"Total video duration = {video_duration} seconds")
 
-    # Set audio (no trimming – video will continue after audio ends)
+    # Load audio
+    audio_clip = AudioFileClip(audio_file)
+    audio_duration = audio_clip.duration
+    debug_print(f"Audio duration = {audio_duration} seconds")
+
+    # Trim audio to match video length (if longer) or keep as is (if shorter, video will have silence)
+    if audio_duration > video_duration:
+        audio_clip = audio_clip.subclipped(0, video_duration)
+        debug_print(f"Trimmed audio to {video_duration} seconds")
+    else:
+        debug_print("Audio is shorter; video will have silence at the end.")
+
+    # Set audio
     final_video = final_video.with_audio(audio_clip)
 
     # Write final video
@@ -243,6 +250,27 @@ def generate_audio(text, filename):
         debug_print(f"TTS failed: {e}")
         # Create a silent fallback audio
         os.system(f'ffmpeg -f lavfi -i anullsrc=r=44100:cl=mono -t 2 -q:a 9 -acodec libmp3lame {filename}')
+
+def process_match(fixture_id, home, away, h_score, a_score):
+    """Generate video using only cartoon clips (no anchor)."""
+    debug_print(f"DEBUG: process_match called with fixture_id={fixture_id}")
+
+    # 1. Get goals for this match
+    goals = get_match_goals(fixture_id)
+    debug_print(f"DEBUG: goals after get_match_goals: {goals}")
+
+    # 2. Generate a detailed script (long enough to cover video)
+    script = generate_script(home, away, h_score, a_score, goals)
+    audio_file = f"audio_{fixture_id}.mp3"
+    generate_audio(script, audio_file)
+
+    # 3. Build video from clips (without anchor)
+    final_video = f"final_{fixture_id}.mp4"
+    build_video_from_clips(goals, audio_file, final_video)
+
+    # 4. Upload
+    title = f"Premier League Result: {home} {h_score} – {a_score} {away} - {datetime.now().strftime('%Y%m%d-%H%M')}"
+    upload_to_youtube(final_video, title)
 
 def upload_to_youtube(video_file, title):
     if not YOUTUBE_TOKEN_JSON:
@@ -273,7 +301,7 @@ def upload_to_youtube(video_file, title):
 def main():
     try:
         debug_print("DEBUG: main() started")
-        fetch_matches()                     # Only real matches
+        fetch_matches()
     except Exception as e:
         debug_print(f"FATAL ERROR: {e}")
         raise
