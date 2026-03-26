@@ -251,6 +251,21 @@ def generate_audio(text, filename):
         # Create a silent fallback audio
         os.system(f'ffmpeg -f lavfi -i anullsrc=r=44100:cl=mono -t 2 -q:a 9 -acodec libmp3lame {filename}')
 
+def generate_thumbnail(home, away, h_score, a_score, output_path="thumbnail.jpg"):
+    """Optional: Create a simple thumbnail with team names and score."""
+    img = Image.new("RGB", (1280, 720), color=(30, 40, 60))
+    draw = ImageDraw.Draw(img)
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf", 80)
+        font_small = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf", 40)
+    except:
+        font = ImageFont.load_default()
+        font_small = font
+    draw.text((640, 360), f"{home} {h_score} – {a_score} {away}", fill="yellow", font=font, anchor="mm")
+    draw.text((640, 500), "Watch the full cartoon recap!", fill="white", font=font_small, anchor="mm")
+    img.save(output_path)
+    return output_path
+
 def process_match(fixture_id, home, away, h_score, a_score):
     """Generate video using only cartoon clips (no anchor)."""
     debug_print(f"DEBUG: process_match called with fixture_id={fixture_id}")
@@ -270,9 +285,13 @@ def process_match(fixture_id, home, away, h_score, a_score):
 
     # 4. Upload
     title = f"Premier League Result: {home} {h_score} – {a_score} {away} - {datetime.now().strftime('%Y%m%d-%H%M')}"
-    upload_to_youtube(final_video, title)
+    upload_to_youtube(final_video, title, home, away, h_score, a_score)
 
-def upload_to_youtube(video_file, title):
+    # Optional: generate and upload thumbnail
+    # thumb = generate_thumbnail(home, away, h_score, a_score)
+    # upload_thumbnail(response['id'], thumb)  # You'd need to add a separate function for that
+
+def upload_to_youtube(video_file, title, home, away, h_score, a_score):
     if not YOUTUBE_TOKEN_JSON:
         debug_print("YouTube token missing. Cannot upload.")
         return
@@ -281,15 +300,34 @@ def upload_to_youtube(video_file, title):
     if creds.expired and creds.refresh_token:
         creds.refresh(Request())
     youtube = build("youtube", "v3", credentials=creds)
+
+    # Build a detailed description with hashtags
+    description = (
+        f"{home} {h_score} – {a_score} {away} | Premier League Highlights\n\n"
+        f"Watch the full match recap with cartoon animation! ⚽🎬\n\n"
+        f"#PremierLeague #Football #Soccer #Highlights #Goal #{home.replace(' ', '')} #"
+        f"{away.replace(' ', '')} #MatchRecap #CartoonFootball #FootballNews\n\n"
+        f"👍 Like and subscribe for more animated football recaps!"
+    )
+
+    # Tags (up to 500 characters)
+    tags = [
+        "Premier League", "Football", "Soccer", "Highlights", "Match Recap",
+        "Goal", "Cartoon Football", "Football Animation", f"{home} vs {away}",
+        f"{home}", f"{away}", "Premier League Highlights", "Football News",
+        "Cartoon Sports", "Animated Football", "Football Match"
+    ]
+
     body = {
         "snippet": {
             "title": title,
-            "description": f"Latest Premier League result. #PremierLeague #Football",
-            "tags": ["PremierLeague", "Football", "Soccer"],
-            "categoryId": "17"
+            "description": description,
+            "tags": tags,
+            "categoryId": "17"   # Sports
         },
         "status": {"privacyStatus": "public"}
     }
+
     media = MediaFileUpload(video_file, chunksize=-1, resumable=True)
     request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
     try:
