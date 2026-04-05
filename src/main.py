@@ -73,10 +73,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 def fetch_matches():
     headers = {"X-Auth-Token": FOOTBALL_API_KEY}
     posted_response = (
-        supabase.table("matches")
-        .select("fixture_id")
-        .eq("posted", 1)
-        .execute()
+        supabase.table("matches").select("fixture_id").eq("posted", 1).execute()
     )
     posted_ids = [row["fixture_id"] for row in posted_response.data]
 
@@ -119,12 +116,18 @@ def fetch_matches():
                 "season": season,
                 "posted": 0,
             }
-            supabase.table("matches").upsert(data_row, on_conflict="fixture_id").execute()
+            supabase.table("matches").upsert(
+                data_row, on_conflict="fixture_id"
+            ).execute()
 
             if status == "FINISHED":
-                debug_print(f"Processing finished match: {home} vs {away} ({comp_name})")
+                debug_print(
+                    f"Processing finished match: {home} vs {away} ({comp_name})"
+                )
                 process_match(fixture_id, home, away, home_score, away_score)
-                supabase.table("matches").update({"posted": 1}).eq("fixture_id", fixture_id).execute()
+                supabase.table("matches").update({"posted": 1}).eq(
+                    "fixture_id", fixture_id
+                ).execute()
 
 
 def get_match_goals(fixture_id):
@@ -362,7 +365,9 @@ def upload_to_youtube(video_file, title, description, tags):
         "status": {"privacyStatus": "public"},
     }
     media = MediaFileUpload(video_file, chunksize=-1, resumable=True)
-    request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
+    request = youtube.videos().insert(
+        part="snippet,status", body=body, media_body=media
+    )
     try:
         response = request.execute()
         debug_print(f"Upload successful! Video ID: {response['id']}")
