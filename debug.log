@@ -1,0 +1,16 @@
+Debug log started
+⚠️ DRY RUN MODE: YouTube upload will be skipped.
+DEBUG: main() started
+DRY RUN is active – no YouTube uploads will occur.
+TEST MODE: Using dummy match instead of API call.
+DEBUG: Dummy goal injected: [{'player': 'Test Scorer', 'minute': 67, 'team': 'Arsenal'}]
+Generated script: Hello football fans! Welcome to our Premier League match recap. In today's match, Arsenal faced Everton. There were 1 goals in this exciting encounter. In the 67 minute, Test Scorer scored for Arsenal. The final score was Arsenal 2 – Everton 1. That's all for now. Don't forget to like and subscribe for more updates!
+Audio saved to audio_999999.mp3
+DEBUG: build_video_from_clips started
+Loaded assets/clips/football_news.mp4, duration=30.06
+Loaded assets/clips/football_with_players.mp4, duration=14.31
+Loaded assets/clips/goal_to_net.mp4, duration=7.34
+Added text overlay to goal_to_net.mp4
+Loaded assets/clips/celebration.mp4, duration=12.21
+Final video saved to final_999999.mp4
+TEST MODE: dummy video created, skipping real API fetch.

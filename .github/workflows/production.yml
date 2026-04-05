@@ -1,0 +1,65 @@
+name: Production
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg imagemagick
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+      - name: Run production script (DRY_RUN=false by default)
+        env:
+          FOOTBALL_API_KEY: ${{ secrets.FOOTBALL_API_KEY }}
+          VOICERSS_API_KEY: ${{ secrets.VOICERSS_API_KEY }}
+          REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # DRY_RUN is NOT set – defaults to false, so videos will upload
+        run: python src/main.py
+      - name: Upload final video artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-video
+          path: final_*.mp4
+      - name: AI Error Analysis on failure
+        if: failure()
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          tail -n 50 debug.log > error_snippet.txt 2>/dev/null || echo "No log" > error_snippet.txt
+          ERROR_TEXT=$(cat error_snippet.txt | jq -sR .)
+          curl -s https://api.openai.com/v1/chat/completions \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"model\": \"gpt-3.5-turbo\",
+              \"messages\": [
+                {\"role\": \"system\", \"content\": \"Explain the error in one short sentence and suggest a fix.\"},
+                {\"role\": \"user\", \"content\": $ERROR_TEXT}
+              ]
+            }" > analysis.json
+          jq -r '.choices[0].message.content' analysis.json > analysis.txt
+      - name: Send AI analysis to Telegram
+        if: failure()
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            ❌ Production failed!
+            Repo: ${{ github.repository }}
+            Run: ${{ github.run_id }}
+            🤖 AI Diagnosis: $(cat analysis.txt)
