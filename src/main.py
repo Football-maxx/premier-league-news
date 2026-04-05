@@ -17,19 +17,17 @@ from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
-import replicate
 from supabase import create_client, Client
 import openai
 
 # ---------- CONFIGURATION (ENVIRONMENT VARIABLES) ----------
 FOOTBALL_API_KEY = os.environ.get("FOOTBALL_API_KEY")
 VOICERSS_API_KEY = os.environ.get("VOICERSS_API_KEY")
-REPLICATE_API_TOKEN = os.environ.get("REPLICATE_API_TOKEN")
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY")
 YOUTUBE_TOKEN_JSON = os.environ.get("YOUTUBE_TOKEN_JSON")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-DRY_RUN = os.environ.get("DRY_RUN", "false").lower() == "true"   # only used in staging
+DRY_RUN = os.environ.get("DRY_RUN", "false").lower() == "true"
 # ------------------------------------------------------------
 
 # Set OpenAI API key if provided
@@ -50,6 +48,7 @@ DEBUG_LOG = "debug.log"
 with open(DEBUG_LOG, "w") as f:
     f.write("Debug log started\n")
 
+
 def debug_print(msg):
     print(msg)
     sys.stdout.flush()
@@ -57,11 +56,13 @@ def debug_print(msg):
         f.write(msg + "\n")
         f.flush()
 
+
 if DRY_RUN:
     debug_print("⚠️ DRY RUN MODE: YouTube upload will be skipped.")
 
 # Initialize Supabase
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+
 
 def fetch_matches():
     headers = {"X-Auth-Token": FOOTBALL_API_KEY}
@@ -77,7 +78,7 @@ def fetch_matches():
             response = requests.get(url, headers=headers, timeout=10)
             response.raise_for_status()
             data = response.json()
-            time.sleep(6)   # respect rate limit
+            time.sleep(6)
         except Exception as e:
             debug_print(f"Error fetching {comp_name}: {e}")
             continue
@@ -114,6 +115,7 @@ def fetch_matches():
                 process_match(fixture_id, home, away, home_score, away_score)
                 supabase.table("matches").update({"posted": 1}).eq("fixture_id", fixture_id).execute()
 
+
 def get_match_goals(fixture_id):
     debug_print(f"DEBUG: get_match_goals called for fixture {fixture_id}")
     url = f"https://api.football-data.org/v4/matches/{fixture_id}"
@@ -138,6 +140,7 @@ def get_match_goals(fixture_id):
     debug_print(f"DEBUG: get_match_goals returning {len(goals)} goals")
     return goals
 
+
 def generate_script(home, away, h_score, a_score, goals, competition_name):
     script = f"Hello football fans! Welcome to our {competition_name} match recap. "
     script += f"In today's match, {home} faced {away}. "
@@ -146,11 +149,12 @@ def generate_script(home, away, h_score, a_score, goals, competition_name):
         for goal in goals:
             script += f"In the {goal['minute']} minute, {goal['player']} scored for {goal['team']}. "
     else:
-        script += f"It was a goalless draw. "
+        script += "It was a goalless draw. "
     script += f"The final score was {home} {h_score} – {away} {a_score}. "
-    script += f"That's all for now. Don't forget to like and subscribe for more updates!"
+    script += "That's all for now. Don't forget to like and subscribe for more updates!"
     debug_print(f"Generated script: {script}")
     return script
+
 
 def generate_ai_metadata(home, away, h_score, a_score, goals, competition_name):
     if not OPENAI_API_KEY:
@@ -181,6 +185,7 @@ def generate_ai_metadata(home, away, h_score, a_score, goals, competition_name):
         debug_print(f"AI metadata generation failed: {e}")
         return None
 
+
 def build_video_from_clips(goals, audio_file, output_path):
     debug_print("DEBUG: build_video_from_clips started")
     clip_sequence = [
@@ -200,29 +205,35 @@ def build_video_from_clips(goals, audio_file, output_path):
             if clip_path == "assets/clips/goal_to_net.mp4" and goals:
                 goal = goals[0]
                 text_str = f"{goal['player']} – {goal['minute']}'"
+
+                # Create text overlay using PIL (frame‑by‑frame)
                 try:
                     font = ImageFont.truetype("/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf", 40)
-                except:
+                except Exception:
                     font = ImageFont.load_default()
+
                 def make_text_frame(t):
-                    img = Image.new('RGBA', (clip.w, clip.h), (0,0,0,0))
+                    img = Image.new('RGBA', (clip.w, clip.h), (0, 0, 0, 0))
                     draw = ImageDraw.Draw(img)
-                    bbox = draw.textbbox((0,0), text_str, font=font)
+                    bbox = draw.textbbox((0, 0), text_str, font=font)
                     tw = bbox[2] - bbox[0]
                     th = bbox[3] - bbox[1]
                     x = (clip.w - tw) // 2
                     y = clip.h - th - 20
                     draw.text((x, y), text_str, fill='yellow', font=font, stroke_width=2, stroke_fill='black')
                     return np.array(img)
+
                 text_clip = VideoClip(make_text_frame, duration=clip.duration)
                 clip = CompositeVideoClip([clip, text_clip])
-                debug_print(f"Added text overlay to goal_to_net.mp4")
+                debug_print("Added text overlay to goal_to_net.mp4")
             all_clips.append(clip)
         except Exception as e:
             debug_print(f"Error loading {clip_path}: {e}")
+
     if not all_clips:
         debug_print("ERROR: No clips could be loaded.")
         return
+
     final_video = concatenate_videoclips(all_clips, method="compose")
     video_duration = final_video.duration
     audio_clip = AudioFileClip(audio_file)
@@ -233,6 +244,7 @@ def build_video_from_clips(goals, audio_file, output_path):
     final_video = final_video.with_audio(audio_clip)
     final_video.write_videofile(output_path, codec='libx264', audio_codec='aac')
     debug_print(f"Final video saved to {output_path}")
+
 
 def generate_audio(text, filename):
     url = f"http://api.voicerss.org/?key={VOICERSS_API_KEY}&hl=en-gb&src={text}&f=44khz_16bit_stereo"
@@ -245,6 +257,7 @@ def generate_audio(text, filename):
     except Exception as e:
         debug_print(f"TTS failed: {e}")
         os.system(f'ffmpeg -f lavfi -i anullsrc=r=44100:cl=mono -t 2 -q:a 9 -acodec libmp3lame {filename}')
+
 
 def process_match(fixture_id, home, away, h_score, a_score):
     debug_print(f"DEBUG: process_match called with fixture_id={fixture_id}")
@@ -269,7 +282,7 @@ def process_match(fixture_id, home, away, h_score, a_score):
     if ai_meta:
         title = ai_meta.get('title', f"{comp_name} Result: {home} {h_score} – {a_score} {away}")[:70]
         tags = ai_meta.get('tags', ["Football", "Highlights"])
-        description = ai_meta.get('description', f"Watch the full match recap with cartoon animation! ⚽🎬")
+        description = ai_meta.get('description', "Watch the full match recap with cartoon animation! ⚽🎬")
     else:
         title = f"{comp_name} Result: {home} {h_score} – {a_score} {away} - {datetime.now().strftime('%Y%m%d-%H%M')}"
         tags = ["Football", "Soccer", "Highlights", "Match Recap", comp_name]
@@ -279,6 +292,7 @@ def process_match(fixture_id, home, away, h_score, a_score):
         debug_print(f"DRY RUN: Video would be uploaded as '{title}'")
     else:
         upload_to_youtube(final_video, title, description, tags)
+
 
 def upload_to_youtube(video_file, title, description, tags):
     if not YOUTUBE_TOKEN_JSON:
@@ -306,6 +320,7 @@ def upload_to_youtube(video_file, title, description, tags):
     except Exception as e:
         debug_print(f"Upload failed: {e}")
 
+
 def main():
     try:
         debug_print("DEBUG: main() started")
@@ -315,6 +330,7 @@ def main():
     except Exception as e:
         debug_print(f"FATAL ERROR: {e}")
         raise
+
 
 if __name__ == "__main__":
     main()
