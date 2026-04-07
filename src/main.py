@@ -356,11 +356,9 @@ def upload_to_youtube(video_file, title, description, tags):
         return
     creds_data = json.loads(YOUTUBE_TOKEN_JSON)
     # The JSON may come from either OAuth Playground or Python script.
-    # Convert if needed.
     if "client_id" not in creds_data:
-        # Playground format: convert to expected format using dummy client_id/secret
-        # Actually better to use the token directly with a request. Simpler: use the refresh token.
-        from google.oauth2.credentials import Credentials
+        # Playground format: use the token directly with refresh
+        # Note: we already imported Credentials at top
         creds = Credentials(
             token=creds_data.get("access_token"),
             refresh_token=creds_data.get("refresh_token"),
