@@ -272,7 +272,6 @@ def build_video_from_clips(goals, audio_file, output_path):
     final_video = final_video.with_audio(audio_clip)
 
     # OPTIMIZED WRITE: faster encoding, multi‑thread, no progress bar
-    # Removed 'progress_bar' argument because it's not supported in moviepy 2.x
     final_video.write_videofile(
         output_path,
         codec="libx264",
@@ -285,6 +284,7 @@ def build_video_from_clips(goals, audio_file, output_path):
 
 
 def generate_audio(text, filename):
+    """Generate audio from text using Voice RSS. Fallback to a valid silent MP3 if fails."""
     url = (
         f"http://api.voicerss.org/?key={VOICERSS_API_KEY}"
         f"&hl=en-gb&src={text}&f=44khz_16bit_stereo"
@@ -295,12 +295,22 @@ def generate_audio(text, filename):
         with open(filename, "wb") as f:
             f.write(response.content)
         debug_print(f"Audio saved to {filename}")
+
+        # Verify the file is valid and non‑empty
+        if os.path.getsize(filename) == 0:
+            raise Exception("Audio file is empty")
+        # Try to load it with AudioFileClip to check integrity
+        test_clip = AudioFileClip(filename)
+        test_clip.close()
     except Exception as e:
-        debug_print(f"TTS failed: {e}")
-        os.system(
-            f"ffmpeg -f lavfi -i anullsrc=r=44100:cl=mono -t 2 "
-            f"-q:a 9 -acodec libmp3lame {filename}"
+        debug_print(f"TTS failed or produced invalid audio: {e}. Creating silent MP3.")
+        # Create a reliable silent MP3 using ffmpeg (2 seconds)
+        silent_cmd = (
+            "ffmpeg -f lavfi -i anullsrc=r=44100:cl=mono -t 2 "
+            "-q:a 9 -acodec libmp3lame -y {}"
         )
+        os.system(silent_cmd.format(filename))
+        debug_print(f"Silent audio created at {filename}")
 
 
 def process_match(fixture_id, home, away, h_score, a_score):
