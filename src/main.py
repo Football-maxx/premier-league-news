@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Automated Football Cartoon News System
-Supports Premier League, FA Cup, Carabao Cup, Bundesliga, LaLiga.
+Supports Premier League, FA Cup, Carabao Cup, Bundesliga, LaLiga, Champions League.
 """
 
 import os
@@ -46,6 +46,7 @@ COMPETITIONS_TO_TRACK = [
     {"id": "ELC", "name": "Carabao Cup"},
     {"id": "BL1", "name": "Bundesliga"},
     {"id": "PD", "name": "LaLiga"},
+    {"id": "CL", "name": "UEFA Champions League"},
 ]
 
 # Initialize debug log file
@@ -317,6 +318,7 @@ def process_match(fixture_id, home, away, h_score, a_score):
         "ELC": "Carabao Cup",
         "BL1": "Bundesliga",
         "PD": "LaLiga",
+        "CL": "UEFA Champions League",
     }.get(comp_code, "Football")
 
     goals = get_match_goals(fixture_id)
