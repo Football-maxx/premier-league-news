@@ -272,6 +272,7 @@ def build_video_from_clips(goals, audio_file, output_path):
     final_video = final_video.with_audio(audio_clip)
 
     # OPTIMIZED WRITE: faster encoding, multi‑thread, no progress bar
+    # Removed 'progress_bar' argument because it's not supported in moviepy 2.x
     final_video.write_videofile(
         output_path,
         codec="libx264",
@@ -279,7 +280,6 @@ def build_video_from_clips(goals, audio_file, output_path):
         preset="ultrafast",
         threads=4,
         logger=None,
-        progress_bar=False,
     )
     debug_print(f"Final video saved to {output_path}")
 
