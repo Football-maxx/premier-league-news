@@ -24,7 +24,7 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from supabase import create_client, Client
-import openai
+from openai import OpenAI
 
 # ---------- CONFIGURATION (ENVIRONMENT VARIABLES) ----------
 FOOTBALL_API_KEY = os.environ.get("FOOTBALL_API_KEY")
@@ -36,9 +36,8 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 DRY_RUN = os.environ.get("DRY_RUN", "false").lower() == "true"
 # ------------------------------------------------------------
 
-# Set OpenAI API key if provided
-if OPENAI_API_KEY:
-    openai.api_key = OPENAI_API_KEY
+# Set OpenAI client if key provided
+openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 # Competitions to track
 COMPETITIONS_TO_TRACK = [
@@ -73,7 +72,10 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 def fetch_matches():
     headers = {"X-Auth-Token": FOOTBALL_API_KEY}
     posted_response = (
-        supabase.table("matches").select("fixture_id").eq("posted", 1).execute()
+        supabase.table("matches")
+        .select("fixture_id")
+        .eq("posted", 1)
+        .execute()
     )
     posted_ids = [row["fixture_id"] for row in posted_response.data]
 
@@ -116,18 +118,12 @@ def fetch_matches():
                 "season": season,
                 "posted": 0,
             }
-            supabase.table("matches").upsert(
-                data_row, on_conflict="fixture_id"
-            ).execute()
+            supabase.table("matches").upsert(data_row, on_conflict="fixture_id").execute()
 
             if status == "FINISHED":
-                debug_print(
-                    f"Processing finished match: {home} vs {away} ({comp_name})"
-                )
+                debug_print(f"Processing finished match: {home} vs {away} ({comp_name})")
                 process_match(fixture_id, home, away, home_score, away_score)
-                supabase.table("matches").update({"posted": 1}).eq(
-                    "fixture_id", fixture_id
-                ).execute()
+                supabase.table("matches").update({"posted": 1}).eq("fixture_id", fixture_id).execute()
 
 
 def get_match_goals(fixture_id):
@@ -173,7 +169,7 @@ def generate_script(home, away, h_score, a_score, goals, competition_name):
 
 
 def generate_ai_metadata(home, away, h_score, a_score, goals, competition_name):
-    if not OPENAI_API_KEY:
+    if not openai_client:
         return None
     goals_text = (
         ", ".join([f"{g['player']} ({g['minute']}')" for g in goals])
@@ -190,14 +186,13 @@ def generate_ai_metadata(home, away, h_score, a_score, goals, competition_name):
     Output as JSON: {{"title": "...", "tags": ["...", ...], "description": "..."}}
     """
     try:
-        response = openai.ChatCompletion.create(
+        response = openai_client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
         )
         content = response.choices[0].message.content
         import re
-
         json_match = re.search(r"\{.*\}", content, re.DOTALL)
         if json_match:
             return json.loads(json_match.group())
@@ -228,7 +223,6 @@ def build_video_from_clips(goals, audio_file, output_path):
                 goal = goals[0]
                 text_str = f"{goal['player']} – {goal['minute']}'"
 
-                # Create text overlay using PIL (frame‑by‑frame)
                 try:
                     font = ImageFont.truetype(
                         "/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf", 40
@@ -273,7 +267,17 @@ def build_video_from_clips(goals, audio_file, output_path):
         audio_clip = audio_clip.subclipped(0, video_duration)
         debug_print(f"Trimmed audio to {video_duration} seconds")
     final_video = final_video.with_audio(audio_clip)
-    final_video.write_videofile(output_path, codec="libx264", audio_codec="aac")
+
+    # OPTIMIZED WRITE: faster encoding, multi‑thread, no progress bar
+    final_video.write_videofile(
+        output_path,
+        codec="libx264",
+        audio_codec="aac",
+        preset="ultrafast",
+        threads=4,
+        logger=None,
+        progress_bar=False,
+    )
     debug_print(f"Final video saved to {output_path}")
 
 
@@ -351,7 +355,21 @@ def upload_to_youtube(video_file, title, description, tags):
         debug_print("YouTube token missing. Cannot upload.")
         return
     creds_data = json.loads(YOUTUBE_TOKEN_JSON)
-    creds = Credentials.from_authorized_user_info(creds_data)
+    # The JSON may come from either OAuth Playground or Python script.
+    # Convert if needed.
+    if "client_id" not in creds_data:
+        # Playground format: convert to expected format using dummy client_id/secret
+        # Actually better to use the token directly with a request. Simpler: use the refresh token.
+        from google.oauth2.credentials import Credentials
+        creds = Credentials(
+            token=creds_data.get("access_token"),
+            refresh_token=creds_data.get("refresh_token"),
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=os.environ.get("YOUTUBE_CLIENT_ID", ""),
+            client_secret=os.environ.get("YOUTUBE_CLIENT_SECRET", ""),
+        )
+    else:
+        creds = Credentials.from_authorized_user_info(creds_data)
     if creds.expired and creds.refresh_token:
         creds.refresh(Request())
     youtube = build("youtube", "v3", credentials=creds)
@@ -365,9 +383,7 @@ def upload_to_youtube(video_file, title, description, tags):
         "status": {"privacyStatus": "public"},
     }
     media = MediaFileUpload(video_file, chunksize=-1, resumable=True)
-    request = youtube.videos().insert(
-        part="snippet,status", body=body, media_body=media
-    )
+    request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
     try:
         response = request.execute()
         debug_print(f"Upload successful! Video ID: {response['id']}")
