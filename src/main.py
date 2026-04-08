@@ -116,10 +116,14 @@ def fetch_matches():
                 "season": season,
                 "posted": 0,
             }
-            supabase.table("matches").upsert(data_row, on_conflict="fixture_id").execute()
+            supabase.table("matches").upsert(
+                data_row, on_conflict="fixture_id"
+            ).execute()
 
             if status == "FINISHED":
-                debug_print(f"Processing finished match: {home} vs {away} ({comp_name})")
+                debug_print(
+                    f"Processing finished match: {home} vs {away} ({comp_name})"
+                )
                 process_match(fixture_id, home, away, home_score, away_score)
                 supabase.table("matches").update({"posted": 1}).eq(
                     "fixture_id", fixture_id
@@ -159,9 +163,7 @@ def generate_script(home, away, h_score, a_score, goals, competition_name):
     if goals:
         script += f"There were {len(goals)} goals in this exciting encounter. "
         for goal in goals:
-            script += (
-                f"In the {goal['minute']} minute, {goal['player']} scored for {goal['team']}. "
-            )
+            script += f"In the {goal['minute']} minute, {goal['player']} scored for {goal['team']}. "
     else:
         script += "It was a goalless draw. "
     script += f"The final score was {home} {h_score} – {away} {a_score}. "
@@ -394,7 +396,9 @@ def upload_to_youtube(video_file, title, description, tags):
         "status": {"privacyStatus": "public"},
     }
     media = MediaFileUpload(video_file, chunksize=-1, resumable=True)
-    request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
+    request = youtube.videos().insert(
+        part="snippet,status", body=body, media_body=media
+    )
     try:
         response = request.execute()
         debug_print(f"Upload successful! Video ID: {response['id']}")
